@@ -1,0 +1,56 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual Environment
+venv/
+env/
+ENV/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Streamlit
+.streamlit/
+
+# Data files (keep structure, ignore actual data)
+data/*.csv
+!data/.gitkeep
+
+# Backup files
+data_backup/
+
+# OS
+.DS_Store
+Thumbs.db
+*.log
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Environment variables
+.env
+.env.local
+
+# ML Models (if saved locally)
+*.pkl
+*.joblib
+*.h5
+models/
+
+# Database files (if using SQLite)
+*.db
+*.sqlite
+*.sqlite3
