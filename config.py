@@ -18,9 +18,6 @@ class Config:
     # Proje kök dizini
     BASE_DIR: Path = Path(__file__).parent.resolve()
 
-    # Veri kaynağı ayarları
-    USE_DATABASE: bool = os.getenv('USE_DATABASE', 'True').lower() == 'true'
-
     # Veritabanı ayarları (PostgreSQL)
     DB_HOST: str = os.getenv('DB_HOST', 'localhost')
     DB_PORT: str = os.getenv('DB_PORT', '5432')
@@ -45,18 +42,6 @@ class Config:
         DB_TABLE_ACCRUAL_FEES,
         DB_TABLE_ACCRUAL_TERMS,
         DB_TABLE_ACCRUAL_FEE_CONSUMPTIONS
-    ]
-
-    # Veri klasörü ayarları (CSV için - geriye dönük uyumluluk)
-    DATA_FOLDER: str = "data"
-    DATA_FOLDER_PATH: Path = BASE_DIR / DATA_FOLDER
-
-    # Gerekli CSV dosyaları
-    REQUIRED_CSV_FILES: List[str] = [
-        "bi_accruals.csv",
-        "bi_accrual_fees.csv",
-        "bi_accrual_terms.csv",
-        "bi_accrual_fee_consumptions.csv"
     ]
 
     # İş mantığı sabitleri
@@ -127,44 +112,6 @@ class Config:
     DATE_FORMAT_INPUT: str = '%Y%m%d%H%M%S'
     DATE_FORMAT_DISPLAY: str = '%Y-%m-%d'
     DATE_FORMAT_MONTH_YEAR: str = '%Y-%m'
-
-    @classmethod
-    def validate_data_folder(cls) -> bool:
-        """
-        Veri klasörünün varlığını ve gerekli dosyaları kontrol et.
-
-        Returns:
-            bool: Tüm dosyalar mevcutsa True
-        """
-        if not cls.DATA_FOLDER_PATH.exists():
-            return False
-
-        for filename in cls.REQUIRED_CSV_FILES:
-            file_path = cls.DATA_FOLDER_PATH / filename
-            if not file_path.exists():
-                return False
-
-        return True
-
-    @classmethod
-    def get_missing_files(cls) -> List[str]:
-        """
-        Eksik CSV dosyalarının listesini döndür.
-
-        Returns:
-            List[str]: Eksik dosya isimleri
-        """
-        missing = []
-
-        if not cls.DATA_FOLDER_PATH.exists():
-            return cls.REQUIRED_CSV_FILES
-
-        for filename in cls.REQUIRED_CSV_FILES:
-            file_path = cls.DATA_FOLDER_PATH / filename
-            if not file_path.exists():
-                missing.append(filename)
-
-        return missing
 
     @classmethod
     def validate_database(cls) -> bool:

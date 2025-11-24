@@ -1,6 +1,6 @@
 """
 Enerji Tüketim Veri İşleme Modülü
-Bu modül veritabanından veya CSV dosyalarından verileri okur, temizler ve analiz için hazırlar.
+Bu modül veritabanından verileri okur, temizler ve analiz için hazırlar.
 """
 
 import pandas as pd
@@ -14,24 +14,14 @@ from database import get_database_manager
 class EnergyDataProcessor:
     """
     Enerji fatura verilerini işleyen ana sınıf.
-    Veritabanından veya CSV dosyalarından veri okur, birleştirir ve analiz için hazırlar.
+    Veritabanından veri okur, birleştirir ve analiz için hazırlar.
     """
 
-    def __init__(self, data_folder: str = "data", use_database: Optional[bool] = None):
+    def __init__(self):
         """
         Veri işleyiciyi başlat
-
-        Args:
-            data_folder: CSV dosyalarının bulunduğu klasör yolu (use_database=False ise kullanılır)
-            use_database: True ise veritabanından, False ise CSV'den veri okur.
-                         None ise Config.USE_DATABASE değerini kullanır.
         """
-        self.data_folder = data_folder
-        self.use_database = use_database if use_database is not None else Config.USE_DATABASE
-        self.db_manager = None
-
-        if self.use_database:
-            self.db_manager = get_database_manager()
+        self.db_manager = get_database_manager()
 
         self.df_accruals = None
         self.df_fees = None
@@ -41,15 +31,12 @@ class EnergyDataProcessor:
         
     def load_data(self) -> bool:
         """
-        Veritabanından veya CSV dosyalarından verileri yükle
+        Veritabanından verileri yükle
 
         Returns:
             bool: Yükleme başarılıysa True, değilse False
         """
-        if self.use_database:
-            return self._load_from_database()
-        else:
-            return self._load_from_csv()
+        return self._load_from_database()
 
     def _load_from_database(self) -> bool:
         """
@@ -90,46 +77,6 @@ class EnergyDataProcessor:
             print(f"[HATA] Veritabani yuklemede hata: {e}")
             return False
 
-    def _load_from_csv(self) -> bool:
-        """
-        CSV dosyalarından verileri yükle (geriye dönük uyumluluk)
-
-        Returns:
-            bool: Yükleme başarılıysa True, değilse False
-        """
-        try:
-            print("[YUKLE] CSV dosyalari yukleniyor...")
-
-            # bi_accruals.csv - Ana fatura bilgileri
-            accruals_path = os.path.join(self.data_folder, "bi_accruals.csv")
-            self.df_accruals = pd.read_csv(accruals_path)
-            print(f"[OK] bi_accruals.csv yuklendi: {len(self.df_accruals)} kayit")
-
-            # bi_accrual_fees.csv - Fatura ücret detayları
-            fees_path = os.path.join(self.data_folder, "bi_accrual_fees.csv")
-            self.df_fees = pd.read_csv(fees_path)
-            print(f"[OK] bi_accrual_fees.csv yuklendi: {len(self.df_fees)} kayit")
-
-            # bi_accrual_terms.csv - Fatura dönem bilgileri
-            terms_path = os.path.join(self.data_folder, "bi_accrual_terms.csv")
-            self.df_terms = pd.read_csv(terms_path)
-            print(f"[OK] bi_accrual_terms.csv yuklendi: {len(self.df_terms)} kayit")
-
-            # bi_accrual_fee_consumptions.csv - Tüketim detayları
-            consumptions_path = os.path.join(self.data_folder, "bi_accrual_fee_consumptions.csv")
-            self.df_consumptions = pd.read_csv(consumptions_path)
-            print(f"[OK] bi_accrual_fee_consumptions.csv yuklendi: {len(self.df_consumptions)} kayit")
-
-            print("[OK] CSV dosyalari basariyla yuklendi!\n")
-            return True
-
-        except FileNotFoundError as e:
-            print(f"[HATA] CSV dosyasi bulunamadi - {e}")
-            return False
-        except Exception as e:
-            print(f"[HATA] CSV yuklemede beklenmeyen hata: {e}")
-            return False
-    
     def clean_and_prepare(self):
         """
         Verileri temizle ve analiz için hazırla

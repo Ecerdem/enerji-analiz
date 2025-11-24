@@ -47,10 +47,9 @@ st.markdown("""
 @st.cache_data
 def load_and_process_data():
     """
-    Verileri veritabanından veya CSV'den yükle ve işle (cache'lenir, tekrar yüklemeyi önler)
+    Verileri veritabanından yükle ve işle (cache'lenir, tekrar yüklemeyi önler)
     """
-    # Config.USE_DATABASE değerine göre otomatik olarak veri kaynağı seçilir
-    processor = EnergyDataProcessor(data_folder="data")
+    processor = EnergyDataProcessor()
 
     if processor.load_data():
         processor.clean_and_prepare()
@@ -91,30 +90,18 @@ def main():
     
     if df is None:
         st.error("❌ Veri yüklenemedi!")
+        st.warning("""
+        🗄️ **Veritabanı Bağlantısı**
 
-        if Config.USE_DATABASE:
-            st.warning("""
-            🗄️ **Veritabanı Bağlantısı Kullanılıyor**
-
-            Lütfen kontrol edin:
-            1. `.env` dosyasındaki veritabanı bağlantı bilgileri doğru mu?
-            2. PostgreSQL sunucusu çalışıyor mu?
-            3. Gerekli tablolar mevcut mu?
-               - bi_accruals
-               - bi_accrual_fees
-               - bi_accrual_terms
-               - bi_accrual_fee_consumptions
-            """)
-        else:
-            st.info("""
-            📁 **CSV Dosyaları Kullanılıyor**
-
-            Gerekli dosyalar 'data' klasöründe:
-            - bi_accruals.csv
-            - bi_accrual_fees.csv
-            - bi_accrual_terms.csv
-            - bi_accrual_fee_consumptions.csv
-            """)
+        Lütfen kontrol edin:
+        1. `.env` dosyasındaki veritabanı bağlantı bilgileri doğru mu?
+        2. PostgreSQL sunucusu çalışıyor mu?
+        3. Gerekli tablolar mevcut mu?
+           - bi_accruals
+           - bi_accrual_fees
+           - bi_accrual_terms
+           - bi_accrual_fee_consumptions
+        """)
         return
     
     # Görselleştirici oluştur
@@ -273,7 +260,7 @@ def main():
         yearly_cost = yearly_cost[yearly_cost['Birim Fiyat (₺/kWh)'] <= outlier_threshold]
 
         # Yıla göre ters sıralama (yeniden eskiye: 2025 → 2020)
-        yearly_cost = yearly_cost.sort_values('Yıl', ascending=False)
+        yearly_cost = yearly_cost.sort_values('Yıl', ascending=False).reset_index(drop=True)
 
         # Boş veri kontrolü
         if len(yearly_cost) == 0:
@@ -501,7 +488,7 @@ def main():
             )
 
             # Ters sıralama (yeniden eskiye: 2025 → 2020)
-            monthly_detail_display = monthly_detail_sorted.sort_values('Tarih', ascending=False)
+            monthly_detail_display = monthly_detail_sorted.sort_values('Tarih', ascending=False).reset_index(drop=True)
 
             # Gösterim için kolonları düzenle
             display_cols = ['Tarih', 'Tüketim (kWh)', 'Maliyet (₺)', 'Birim Fiyat (₺/kWh)', 'Değişim %']
@@ -575,7 +562,7 @@ def main():
             quarterly_summary['Aylık Ort. Tüketim'] = quarterly_summary['Tüketim (kWh)'] / 3
 
             # Doğru sıralama: Yıl azalan, Çeyrek artan (2025 Q1, Q2, Q3, Q4, 2024 Q1, Q2, ...)
-            quarterly_summary = quarterly_summary.sort_values(['Yıl', 'Çeyrek_No'], ascending=[False, True])
+            quarterly_summary = quarterly_summary.sort_values(['Yıl', 'Çeyrek_No'], ascending=[False, True]).reset_index(drop=True)
 
             # Gösterim için kolonları düzenle
             quarterly_display = quarterly_summary[['Çeyrek', 'Tüketim (kWh)', 'Maliyet (₺)', 'Aylık Ort. Tüketim']]
@@ -605,6 +592,9 @@ def main():
 
             # Boş kayıtları filtrele
             yearly_summary = yearly_summary[yearly_summary['Toplam Tüketim'] > 0]
+
+            # Yıla göre ters sıralama ve index'i düzelt
+            yearly_summary = yearly_summary.sort_values('Yıl', ascending=False).reset_index(drop=True)
 
             st.dataframe(yearly_summary.style.format({
                 'Toplam Tüketim': '{:,.0f} kWh',
