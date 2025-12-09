@@ -10,15 +10,15 @@ from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_absolute_error, r2_score, mean_absolute_percentage_error
 from sklearn.preprocessing import StandardScaler
-from datetime import datetime, timedelta
+from datetime import datetime
 from dateutil.relativedelta import relativedelta
-from typing import Dict, List
+from typing import Dict
 import warnings
 warnings.filterwarnings('ignore')
 
-# XGBoost import (opsiyonel - yüklü değilse Linear Regression kullanır)
+# XGBoost import (opsiyonel - yüklü değilse random forest kullanır)
 try:
-    from xgboost import XGBRegressor
+    from xgboost import XGBRegressor  # type: ignore
     XGBOOST_AVAILABLE = True
 except ImportError:
     XGBOOST_AVAILABLE = False
@@ -26,7 +26,7 @@ except ImportError:
 
 # LightGBM import (opsiyonel)
 try:
-    from lightgbm import LGBMRegressor
+    from lightgbm import LGBMRegressor  # type: ignore
     LIGHTGBM_AVAILABLE = True
 except ImportError:
     LIGHTGBM_AVAILABLE = False
@@ -66,10 +66,9 @@ class EnergyPredictor:
         
         # Tarih özelliklerini ekle
         if 'term_date' in df.columns:
-            df['year'] = df['term_date'].dt.year
-            df['month'] = df['term_date'].dt.month
-            df['day_of_year'] = df['term_date'].dt.dayofyear
-            df['quarter'] = df['term_date'].dt.quarter
+            df['year'] = df['term_date'].dt.year  # type: ignore
+            df['month'] = df['term_date'].dt.month  # type: ignore
+            df['quarter'] = df['term_date'].dt.quarter  # type: ignore
         
         # Zaman serisi özellikleri - kaç ay geçtiğini hesapla
         if 'term_date' in df.columns:
@@ -79,21 +78,12 @@ class EnergyPredictor:
                 self.min_date = min_date
                 self.reference_year = min_date.year
                 self.reference_month = min_date.month
-            df['months_from_start'] = ((df['term_date'].dt.year - min_date.year) * 12 +
-                                       (df['term_date'].dt.month - min_date.month))
+            df['months_from_start'] = ((df['term_date'].dt.year - min_date.year) * 12 +  # type: ignore
+                                       (df['term_date'].dt.month - min_date.month))  # type: ignore
         
         # Mevsim bilgisi ekle (1: İlkbahar, 2: Yaz, 3: Sonbahar, 4: Kış)
         if 'month' in df.columns:
             df['season'] = df['month'].apply(self._get_season)
-        
-        # Hafta içi/hafta sonu bilgisi
-        if 'term_date' in df.columns:
-            df['is_weekend'] = df['term_date'].dt.dayofweek >= 5
-            df['is_weekend'] = df['is_weekend'].astype(int)
-
-        # Yıl içindeki hafta sayısı
-        if 'term_date' in df.columns:
-            df['week_of_year'] = df['term_date'].dt.isocalendar().week
 
         # Kış/yaz ayları binary feature
         if 'month' in df.columns:
@@ -235,7 +225,7 @@ class EnergyPredictor:
             return consumption * self.avg_unit_price
 
         total_cost = 0
-        for category, data in self.category_distribution.items():
+        for _, data in self.category_distribution.items():
             # Bu kategorinin tüketim payı
             category_consumption = consumption * data['ratio']
             # Bu kategorinin maliyeti
@@ -410,8 +400,11 @@ class EnergyPredictor:
             self.reference_month = monthly_agg['month'].min()
 
         # Feature'ları ekle
-        monthly_agg['months_from_start'] = ((monthly_agg['year'] - self.reference_year) * 12 +
-                                            (monthly_agg['month'] - self.reference_month))
+        # None kontrolü ile güvenli hesaplama
+        ref_year = self.reference_year if self.reference_year is not None else monthly_agg['year'].min()
+        ref_month = self.reference_month if self.reference_month is not None else 1
+        monthly_agg['months_from_start'] = ((monthly_agg['year'] - ref_year) * 12 +
+                                            (monthly_agg['month'] - ref_month))
         monthly_agg['season'] = monthly_agg['month'].apply(self._get_season)
         monthly_agg['quarter'] = ((monthly_agg['month'] - 1) // 3 + 1)
         monthly_agg['is_summer'] = monthly_agg['month'].isin([6, 7, 8]).astype(int)
@@ -507,7 +500,7 @@ class EnergyPredictor:
             'best_model': self.best_model_name
         }
     
-    def predict_future(self, months_ahead: int = 6) -> pd.DataFrame:
+    def predict_future(self, months_ahead: int = 6) -> pd.DataFrame | None:
         """
         Gelecek aylar için tahmin yap
         
@@ -517,7 +510,7 @@ class EnergyPredictor:
         Returns:
             Tahminleri içeren DataFrame
         """
-        if not self.is_trained:
+        if not self.is_trained or self.consumption_model is None:
             print("[HATA] Model henuz egitilmedi! Once train_models() cagirin.")
             return None
 
@@ -532,8 +525,11 @@ class EnergyPredictor:
         for date in future_dates:
             # Özellikleri hazırla
             # months_from_start: Başlangıçtan bu tarihe kadar geçen ay sayısı
-            months_from_start = ((date.year - self.reference_year) * 12 +
-                                (date.month - self.reference_month))
+            # None kontrolü ile güvenli hesaplama
+            ref_year = self.reference_year if self.reference_year is not None else datetime.now().year
+            ref_month = self.reference_month if self.reference_month is not None else 1
+            months_from_start = ((date.year - ref_year) * 12 +
+                                (date.month - ref_month))
 
             features = {
                 'year': date.year,
@@ -568,22 +564,25 @@ class EnergyPredictor:
 
         return df_predictions
     
-    def predict_next_month(self) -> Dict:
+    def predict_next_month(self) -> Dict | None:
         """
         Önümüzdeki ay için detaylı tahmin yap
         
         Returns:
             Tahmin bilgilerini içeren dictionary
         """
-        if not self.is_trained:
+        if not self.is_trained or self.consumption_model is None:
             return None
 
         # Gelecek ay (ay bazında, gün sayısı değil!)
         next_month = datetime.now() + relativedelta(months=1)
 
         # months_from_start hesapla
-        months_from_start = ((next_month.year - self.reference_year) * 12 +
-                            (next_month.month - self.reference_month))
+        # None kontrolü ile güvenli hesaplama
+        ref_year = self.reference_year if self.reference_year is not None else datetime.now().year
+        ref_month = self.reference_month if self.reference_month is not None else 1
+        months_from_start = ((next_month.year - ref_year) * 12 +
+                            (next_month.month - ref_month))
 
         features = {
             'year': next_month.year,
@@ -611,7 +610,7 @@ class EnergyPredictor:
             'season': ['İlkbahar', 'Yaz', 'Sonbahar', 'Kış'][features['season'] - 1]
         }
     
-    def get_yearly_forecast(self, year: int) -> pd.DataFrame:
+    def get_yearly_forecast(self, year: int) -> pd.DataFrame | None:
         """
         Belirli bir yıl için aylık tahminler oluştur
         
@@ -621,15 +620,18 @@ class EnergyPredictor:
         Returns:
             Yıllık tahminler DataFrame'i
         """
-        if not self.is_trained:
+        if not self.is_trained or self.consumption_model is None:
             return None
-        
+
         predictions = []
 
         for month in range(1, 13):
             # months_from_start hesapla
-            months_from_start = ((year - self.reference_year) * 12 +
-                                (month - self.reference_month))
+            # None kontrolü ile güvenli hesaplama
+            ref_year = self.reference_year if self.reference_year is not None else datetime.now().year
+            ref_month = self.reference_month if self.reference_month is not None else 1
+            months_from_start = ((year - ref_year) * 12 +
+                                (month - ref_month))
 
             features = {
                 'year': year,
@@ -661,7 +663,7 @@ class EnergyPredictor:
         
         return pd.DataFrame(predictions)
     
-    def compare_prediction_vs_actual(self, df: pd.DataFrame) -> pd.DataFrame:
+    def compare_prediction_vs_actual(self, df: pd.DataFrame) -> pd.DataFrame | None:
         """
         Gerçek değerler ile tahminleri karşılaştır
         
@@ -671,9 +673,9 @@ class EnergyPredictor:
         Returns:
             Karşılaştırma sonuçları
         """
-        if not self.is_trained:
+        if not self.is_trained or self.consumption_model is None:
             return None
-        
+
         df = self.prepare_features(df)
         df = df.dropna(subset=self.feature_columns + ['total_consumption'])
         

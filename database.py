@@ -54,15 +54,15 @@ class DatabaseManager:
         Returns:
             str: PostgreSQL bağlantı string'i
         """
-        db_host = os.getenv('DB_HOST')
-        db_port = os.getenv('DB_PORT')
-        db_name = os.getenv('DB_NAME')
-        db_user = os.getenv('DB_USER')
-        db_password = os.getenv('DB_PASSWORD')
+        db_host = os.getenv('DB_HOST', '')
+        db_port = os.getenv('DB_PORT', '')
+        db_name = os.getenv('DB_NAME', '')
+        db_user = os.getenv('DB_USER', '')
+        db_password = os.getenv('DB_PASSWORD', '')
 
         # Kullanıcı adı ve şifreyi URL encoding yap (özel karakterler için)
-        db_user_encoded = quote_plus(db_user)
-        db_password_encoded = quote_plus(db_password)
+        db_user_encoded = quote_plus(str(db_user))
+        db_password_encoded = quote_plus(str(db_password))
 
         return f"postgresql://{db_user_encoded}:{db_password_encoded}@{db_host}:{db_port}/{db_name}"
 
@@ -142,7 +142,7 @@ class DatabaseManager:
             logger.info("Veritabanı bağlantısı kapatıldı.")
             self.engine = None
 
-    def get_table_names(self, schema: str = None) -> list:
+    def get_table_names(self, schema: Optional[str] = None) -> list:
         """
         Veritabanındaki tüm tablo isimlerini getirir.
 
@@ -153,21 +153,20 @@ class DatabaseManager:
             list: Tablo isimleri listesi
         """
         try:
-            if schema is None:
-                schema = os.getenv('DB_SCHEMA', 'public')
+            schema_name = schema if schema is not None else os.getenv('DB_SCHEMA', 'public')
 
             engine = self.get_engine()
             with engine.connect() as connection:
                 result = connection.execute(text(
                     "SELECT table_name FROM information_schema.tables "
                     "WHERE table_schema = :schema"
-                ), {"schema": schema})
+                ), {"schema": schema_name})
                 return [row[0] for row in result]
         except SQLAlchemyError as e:
             logger.error(f"Tablo isimleri alınırken hata: {str(e)}")
             return []
 
-    def check_table_exists(self, table_name: str, schema: str = None) -> bool:
+    def check_table_exists(self, table_name: str, schema: Optional[str] = None) -> bool:
         """
         Belirtilen tablonun var olup olmadığını kontrol eder.
 
@@ -179,8 +178,7 @@ class DatabaseManager:
             bool: Tablo varsa True, yoksa False
         """
         try:
-            if schema is None:
-                schema = os.getenv('DB_SCHEMA', 'public')
+            schema_name = schema if schema is not None else os.getenv('DB_SCHEMA', 'public')
 
             engine = self.get_engine()
             with engine.connect() as connection:
@@ -190,8 +188,9 @@ class DatabaseManager:
                     "WHERE table_schema = :schema "
                     "AND table_name = :table_name"
                     ")"
-                ), {"schema": schema, "table_name": table_name})
-                return result.fetchone()[0]
+                ), {"schema": schema_name, "table_name": table_name})
+                row = result.fetchone()
+                return row[0] if row is not None else False
         except SQLAlchemyError as e:
             logger.error(f"Tablo kontrolü sırasında hata: {str(e)}")
             return False

@@ -4,11 +4,10 @@ Plotly kullanarak interaktif grafikler ve analizler oluşturur.
 """
 
 import plotly.graph_objects as go
-import plotly.express as px
 from plotly.subplots import make_subplots
 import pandas as pd
 import numpy as np
-from typing import Dict, List
+from typing import Dict
 
 
 class EnergyVisualizer:
@@ -315,7 +314,7 @@ class EnergyVisualizer:
 
         # Tüketim (sol Y ekseni) - değişim oranına göre renklendirme
         colors = []
-        for idx, row in yearly.iterrows():
+        for _, row in yearly.iterrows():
             if pd.notna(row['consumption_change']):
                 if row['consumption_change'] > 0:
                     colors.append(self.color_scheme['danger'])  # Artış kırmızı
@@ -713,9 +712,14 @@ class EnergyVisualizer:
             max_consumption_idx = monthly_data_filtered['total_consumption'].idxmax()
             min_consumption_idx = monthly_data_filtered['total_consumption'].idxmin()
 
-            max_consumption_month = f"{int(monthly_data_filtered.loc[max_consumption_idx, 'year'])}-{int(monthly_data_filtered.loc[max_consumption_idx, 'month']):02d}"
+            max_year = int(monthly_data_filtered.loc[max_consumption_idx, 'year'])  # type: ignore
+            max_month = int(monthly_data_filtered.loc[max_consumption_idx, 'month'])  # type: ignore
+            max_consumption_month = f"{max_year}-{max_month:02d}"
             max_consumption_value = monthly_data_filtered.loc[max_consumption_idx, 'total_consumption']
-            min_consumption_month = f"{int(monthly_data_filtered.loc[min_consumption_idx, 'year'])}-{int(monthly_data_filtered.loc[min_consumption_idx, 'month']):02d}"
+
+            min_year = int(monthly_data_filtered.loc[min_consumption_idx, 'year'])  # type: ignore
+            min_month = int(monthly_data_filtered.loc[min_consumption_idx, 'month'])  # type: ignore
+            min_consumption_month = f"{min_year}-{min_month:02d}"
             min_consumption_value = monthly_data_filtered.loc[min_consumption_idx, 'total_consumption']
         else:
             max_consumption_month = "N/A"
@@ -776,7 +780,7 @@ class EnergyVisualizer:
                                     'Ort. Birim Fiyat (TL/kWh)', 'Toplam Tüketim (kWh)']
 
         # İsimleri ekle
-        category_summary['Kategori Adı'] = category_summary['Kategori Kodu'].map(
+        category_summary['Kategori Adı'] = category_summary['Kategori Kodu'].apply(
             lambda x: category_names.get(x, x)
         )
 

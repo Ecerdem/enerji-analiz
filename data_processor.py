@@ -4,10 +4,7 @@ Bu modül veritabanından verileri okur, temizler ve analiz için hazırlar.
 """
 
 import pandas as pd
-import numpy as np
-from datetime import datetime
-from typing import Dict, Tuple, Optional
-import os
+from typing import Dict, Optional
 from config import Config
 from database import get_database_manager
 
@@ -23,11 +20,11 @@ class EnergyDataProcessor:
         """
         self.db_manager = get_database_manager()
 
-        self.df_accruals = None
-        self.df_fees = None
-        self.df_terms = None
-        self.df_consumptions = None
-        self.df_merged = None
+        self.df_accruals = pd.DataFrame()
+        self.df_fees = pd.DataFrame()
+        self.df_terms = pd.DataFrame()
+        self.df_consumptions = pd.DataFrame()
+        self.df_merged = pd.DataFrame()
         
     def load_data(self) -> bool:
         """
@@ -86,6 +83,11 @@ class EnergyDataProcessor:
         """
         print("[TEMIZLE] Veriler temizleniyor ve hazirlaniyor...")
 
+        # Veri yüklenmiş mi kontrol et
+        if self.df_terms.empty or self.df_accruals.empty:
+            print("[HATA] Veri yuklenemedi, temizleme atlanıyor!")
+            return
+
         # Tarih sütunlarını datetime formatına çevir
         # Format: YYYYMMDDHHmmss (örn: 20250226141640)
         if 'term_date' in self.df_terms.columns:
@@ -95,8 +97,8 @@ class EnergyDataProcessor:
                 errors='coerce'
             )
             # Yıl ve ay bilgilerini ayrı sütunlar olarak ekle
-            self.df_terms['year'] = self.df_terms['term_date'].dt.year
-            self.df_terms['month'] = self.df_terms['term_date'].dt.month
+            self.df_terms['year'] = self.df_terms['term_date'].dt.year  # type: ignore
+            self.df_terms['month'] = self.df_terms['term_date'].dt.month  # type: ignore
             print("  [OK] Tarih formatlari duzeltildi")
 
         # Accruals tablosundaki tarih sütunları
@@ -149,6 +151,11 @@ class EnergyDataProcessor:
         Tüm tabloları birleştir ve analiz için tek bir DataFrame oluştur
         """
         print("[BIRLESTIR] Tablolar birlestiriliyor...")
+
+        # Veri yüklenmiş mi kontrol et
+        if self.df_accruals.empty or self.df_terms.empty or self.df_fees.empty:
+            print("[HATA] Veri yuklenemedi, birlestirme atlanıyor!")
+            return
 
         # 1. Accruals ve Terms'i birleştir
         # bi_accruals.id = bi_accrual_terms.accrual_id
@@ -292,20 +299,22 @@ class EnergyDataProcessor:
     def get_processed_data(self) -> pd.DataFrame:
         """
         İşlenmiş veriyi döndür
-        
+
         Returns:
-            Birleştirilmiş ve işlenmiş DataFrame
+            Birleştirilmiş ve işlenmiş DataFrame (boş olabilir)
         """
+        if self.df_merged.empty:
+            return pd.DataFrame()
         return self.df_merged
     
-    def get_summary_statistics(self) -> Dict:
+    def get_summary_statistics(self) -> Optional[Dict]:
         """
         Veri hakkında özet istatistikler
 
         Returns:
-            İstatistikleri içeren dictionary
+            İstatistikleri içeren dictionary (None olabilir)
         """
-        if self.df_merged is None:
+        if self.df_merged.empty:
             return None
 
         # Unique term bazında hesaplama (her term için bir kez say)

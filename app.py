@@ -5,11 +5,9 @@ Streamlit Web Uygulaması - Ana Dosya
 
 import streamlit as st
 import pandas as pd
-import plotly.graph_objects as go
 from data_processor import EnergyDataProcessor
 from predictor import EnergyPredictor
 from visualizer import EnergyVisualizer
-from config import Config
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -111,7 +109,7 @@ def main():
     # ANA SAYFA
     # ========================
     if menu == "Ana Sayfa":
-        st.header("Hoş Geldiniz! 👋")
+        st.header("Hoş Geldiniz!")
         
         st.info("""
         Bu sistem, şirketinizin enerji tüketim verilerini analiz eder ve gelecek tahminleri sunar.
@@ -175,11 +173,11 @@ def main():
         
         with col1:
             fig_trend = visualizer.plot_consumption_trend(df)
-            st.plotly_chart(fig_trend, use_container_width=True)
-        
+            st.plotly_chart(fig_trend, width='stretch')
+
         with col2:
             fig_yearly = visualizer.plot_yearly_comparison(df)
-            st.plotly_chart(fig_yearly, use_container_width=True)
+            st.plotly_chart(fig_yearly, width='stretch')
     
     # ========================
     # TÜKETİM ANALİZİ
@@ -190,12 +188,12 @@ def main():
         # Tüketim trendi
         st.subheader("Tüketim Trendi (Aylık Veriler)")
         fig_trend = visualizer.plot_consumption_trend(df)
-        st.plotly_chart(fig_trend, use_container_width=True)
-        
+        st.plotly_chart(fig_trend, width='stretch')
+
         # Mevsimsel Analiz
         st.subheader("Mevsimsel Analiz")
         fig_seasonal = visualizer.plot_seasonal_analysis(df)
-        st.plotly_chart(fig_seasonal, use_container_width=True)
+        st.plotly_chart(fig_seasonal, width='stretch')
     
     # ========================
     # MALİYET ANALİZİ
@@ -206,12 +204,12 @@ def main():
         # Maliyet grafiği
         st.subheader("Aylık Maliyet Trendi")
         fig_cost = visualizer.plot_cost_analysis(df)
-        st.plotly_chart(fig_cost, use_container_width=True)
-        
+        st.plotly_chart(fig_cost, width='stretch')
+
         # Yıllık karşılaştırma
         st.subheader("Yıllık Karşılaştırma")
         fig_yearly = visualizer.plot_yearly_comparison(df)
-        st.plotly_chart(fig_yearly, use_container_width=True)
+        st.plotly_chart(fig_yearly, width='stretch')
         
         # Maliyet özeti tablosu
         st.subheader("📊 Yıllık Maliyet Özeti")
@@ -260,7 +258,7 @@ def main():
         yearly_cost = yearly_cost[yearly_cost['Birim Fiyat (₺/kWh)'] <= outlier_threshold]
 
         # Yıla göre ters sıralama (yeniden eskiye: 2025 → 2020)
-        yearly_cost = yearly_cost.sort_values('Yıl', ascending=False).reset_index(drop=True)
+        yearly_cost = yearly_cost.sort_values(by='Yıl', ascending=False).reset_index(drop=True)
 
         # Boş veri kontrolü
         if len(yearly_cost) == 0:
@@ -313,7 +311,7 @@ def main():
 
         # Tarife kategorileri pasta grafiği
         fig_pie = visualizer.plot_tariff_categories_pie(df)
-        st.plotly_chart(fig_pie, use_container_width=True)
+        st.plotly_chart(fig_pie, width='stretch')
 
     # ========================
     # TAHMİNLER
@@ -382,7 +380,7 @@ def main():
                     # Tahmin grafiği
                     st.subheader("📈 Tahmin Grafiği")
                     fig_pred = visualizer.plot_future_predictions(predictions)
-                    st.plotly_chart(fig_pred, use_container_width=True)
+                    st.plotly_chart(fig_pred, width='stretch')
                     
                     # Tahmin tablosu
                     st.subheader("📋 Tahmin Detayları")
@@ -394,7 +392,7 @@ def main():
                     st.dataframe(predictions_display.style.format({
                         'Tahmini Tüketim (kWh)': '{:,.2f}',
                         'Tahmini Maliyet (TL)': '₺{:,.2f}'
-                    }), use_container_width=True)
+                    }), width='stretch')
                     
                     # Özet bilgi
                     total_pred_consumption = predictions['Tahmini_Tuketim_kWh'].sum()
@@ -477,13 +475,13 @@ def main():
             monthly_detail = monthly_detail[monthly_detail['Birim Fiyat (₺/kWh)'] <= outlier_threshold]
 
             # Tarihe göre kronolojik sıralama (karşılaştırma için)
-            monthly_detail_sorted = monthly_detail.sort_values('Tarih', ascending=True)
+            monthly_detail_sorted = monthly_detail.sort_values(by='Tarih', ascending=True)
 
             # 1️⃣ Bir önceki aya göre değişim hesapla
             monthly_detail_sorted['Önceki Ay Tüketim'] = monthly_detail_sorted['Tüketim (kWh)'].shift(1)
             monthly_detail_sorted['Değişim %'] = monthly_detail_sorted.apply(
                 lambda row: round(((row['Tüketim (kWh)'] - row['Önceki Ay Tüketim']) / row['Önceki Ay Tüketim'] * 100), 1)
-                if pd.notna(row['Önceki Ay Tüketim']) and row['Önceki Ay Tüketim'] > 0 else None,
+                if pd.notna(row['Önceki Ay Tüketim']) and row['Önceki Ay Tüketim'] > 0 else float('nan'),  # type: ignore
                 axis=1
             )
 
@@ -499,8 +497,8 @@ def main():
                 'Tüketim (kWh)': '{:,.0f}',
                 'Maliyet (₺)': '₺{:,.2f}',
                 'Birim Fiyat (₺/kWh)': '₺{:.2f}',
-                'Değişim %': lambda x: f'+{x:.1f}%' if pd.notna(x) and x > 0 else (f'{x:.1f}%' if pd.notna(x) else '-')
-            }).applymap(
+                'Değişim %': lambda x: f'+{x:.1f}%' if pd.notna(x) and x > 0 else (f'{x:.1f}%' if pd.notna(x) else '-')  # type: ignore
+            }).map(  # type: ignore
                 lambda x: 'color: red' if isinstance(x, str) and '+' in x else ('color: green' if isinstance(x, str) and x not in ['-', 'nan'] and float(x.replace('%','')) < 0 else ''),
                 subset=['Değişim %']
             ), width='stretch', height=600)
@@ -522,7 +520,7 @@ def main():
             with col1:
                 st.markdown("##### 📈 En Yüksek 5 Ay")
                 top5 = monthly_detail_sorted.nlargest(5, 'Tüketim (kWh)')[['Tarih', 'Tüketim (kWh)', 'Maliyet (₺)']]
-                top5.index = range(1, len(top5) + 1)
+                top5.index = list(range(1, len(top5) + 1))  # type: ignore
                 st.dataframe(top5.style.format({
                     'Tüketim (kWh)': '{:,.0f}',
                     'Maliyet (₺)': '₺{:,.2f}'
@@ -531,7 +529,7 @@ def main():
             with col2:
                 st.markdown("##### 📉 En Düşük 5 Ay")
                 bottom5 = monthly_detail_sorted.nsmallest(5, 'Tüketim (kWh)')[['Tarih', 'Tüketim (kWh)', 'Maliyet (₺)']]
-                bottom5.index = range(1, len(bottom5) + 1)
+                bottom5.index = list(range(1, len(bottom5) + 1))  # type: ignore
                 st.dataframe(bottom5.style.format({
                     'Tüketim (kWh)': '{:,.0f}',
                     'Maliyet (₺)': '₺{:,.2f}'
@@ -594,7 +592,7 @@ def main():
             yearly_summary = yearly_summary[yearly_summary['Toplam Tüketim'] > 0]
 
             # Yıla göre ters sıralama ve index'i düzelt
-            yearly_summary = yearly_summary.sort_values('Yıl', ascending=False).reset_index(drop=True)
+            yearly_summary = yearly_summary.sort_values(by='Yıl', ascending=False).reset_index(drop=True)
 
             st.dataframe(yearly_summary.style.format({
                 'Toplam Tüketim': '{:,.0f} kWh',
@@ -603,11 +601,11 @@ def main():
                 'Max Tüketim': '{:,.0f} kWh',
                 'Toplam Maliyet': '₺{:,.2f}',
                 'Ort. Maliyet': '₺{:,.2f}'
-            }), use_container_width=True)
+            }), width='stretch')
 
     # Veri Yenileme Butonu
     st.sidebar.markdown("---")
-    if st.sidebar.button("🔄 Verileri Yenile", use_container_width=True):
+    if st.sidebar.button("🔄 Verileri Yenile", width='stretch'):
         # Cache'leri temizle
         st.cache_data.clear()
         st.cache_resource.clear()

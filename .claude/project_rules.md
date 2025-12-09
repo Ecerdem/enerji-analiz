@@ -8,8 +8,9 @@ Sen bir enerji tüketim analiz ve tahmin platformu üzerinde çalışıyorsun. B
 ## TEMEL TEKNOLOJİLER
 - **Framework:** Streamlit 1.28.0 (web UI)
 - **Veri:** Pandas 2.1.0, NumPy 1.25.0
-- **Grafik:** Plotly 5.17.0 (sadece graph_objects kullan, express değil)
-- **ML:** scikit-learn 1.3.0 (LinearRegression)
+- **Grafik:** Plotly 5.17.0
+- **ML:** scikit-learn 1.3.0 (Random Forest Regressor)
+- **Veritabanı:** PostgreSQL 12+ (psycopg2-binary 2.9.9, SQLAlchemy 2.0.23)
 - **Python:** 3.8+
 
 ## MİMARİ - SEPARATION OF CONCERNS
@@ -18,11 +19,13 @@ Her dosya tek sorumluluk taşır, bunu ASLA bozmayın:
 
 ```
 app.py              → Sadece Streamlit UI ve kullanıcı etkileşimi
-config.py           → Sadece sabitler ve yapılandırma (Config sınıfı)
+database.py         → PostgreSQL bağlantı yönetimi (DatabaseManager - Singleton)
 data_processor.py   → Sadece veri yükleme/temizleme/birleştirme (EnergyDataProcessor)
 predictor.py        → Sadece ML modelleme ve tahminler (EnergyPredictor)
 visualizer.py       → Sadece Plotly grafik oluşturma (EnergyVisualizer)
 ```
+
+**ÖNEMLİ:** `config.py` artık kullanılmıyor. Sabitler ilgili modüllerde tanımlanmıştır.
 
 **Kural:** Grafik kodu `visualizer.py`'de, veri işleme `data_processor.py`'de olmalı. Asla karıştırma!
 
@@ -88,14 +91,23 @@ df = df[df['column'].notna()]
 df_unique = df.drop_duplicates(subset=['accrual_term_id'])
 ```
 
-### 3. Veri İlişkileri (Ezbere Bil)
+### 3. Veri Kaynağı ve İlişkileri
+
+**VERİTABANI (PostgreSQL) - Birincil Kaynak:**
 ```
+Tablolar:
+- bi_accruals (6,067 kayıt)           → Fatura bilgileri
+- bi_accrual_terms (11,027 kayıt)     → Dönem bilgileri
+- bi_accrual_fees (14,549 kayıt)      → Ücret detayları
+- bi_accrual_fee_consumptions (33,352)→ Tüketim detayları
+
+İlişkiler:
 bi_accruals.id = bi_accrual_terms.accrual_id
 bi_accrual_terms.id = bi_accrual_fees.accrual_term_id
 bi_accrual_fees.id = bi_accrual_fee_consumptions.accrual_fee_id
 ```
 
-**Merge Kuralı:** INNER join kullan, left join değil (gereksiz kayıtları elemek için)
+**Merge Kuralı:** İlk iki birleştirme INNER join, son birleştirme LEFT join (consumptions opsiyonel)
 
 ```python
 df_merged = pd.merge(
@@ -121,13 +133,57 @@ else:
     unit_price = 0
 ```
 
+## VERİTABANI KURALLARI
+
+### PostgreSQL Bağlantısı (.env dosyası)
+```bash
+# .env dosyası (GIT'e eklenmez!)
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=enerji_analiz_db
+DB_USER=postgres
+DB_PASSWORD=your_password
+USE_DATABASE=True
+```
+
+**UYARI:** `.env` dosyası `.gitignore`'a eklenmiş olmalı!
+
+### Singleton Pattern (DatabaseManager)
+```python
+_db_manager = None
+
+def get_database_manager():
+    """Singleton DB instance - tek bir bağlantı havuzu"""
+    global _db_manager
+    if _db_manager is None:
+        _db_manager = DatabaseManager()
+    return _db_manager
+```
+
+### Connection Pooling (SQLAlchemy)
+```python
+from sqlalchemy import create_engine
+from urllib.parse import quote_plus
+
+# Şifre encoding (özel karakterler için)
+password = quote_plus(os.getenv('DB_PASSWORD'))
+
+engine = create_engine(
+    f"postgresql://{user}:{password}@{host}:{port}/{db}",
+    pool_size=5,           # Havuz boyutu
+    max_overflow=10,       # Maksimum ek bağlantı
+    pool_timeout=30,       # 30 saniye timeout
+    pool_recycle=3600      # 1 saat sonra yenile
+)
+```
+
 ## GÖRSELLEŞTİRME KURALLARI
 
-### 1. Plotly - SADECE graph_objects
+### 1. Plotly Kullanımı
 ```python
 import plotly.graph_objects as go
-# plotly.express KULLANMA!
 
+# visualizer.py içinde grafik oluşturma metodları
 fig = go.Figure()
 fig.add_trace(go.Scatter(...))
 ```
@@ -235,19 +291,42 @@ with col1:
 
 ## MACHINE LEARNING KURALLARI
 
-### Model Parametreleri (config.py'den)
+### Model: Random Forest Regressor
 ```python
-# Sabitler
-ML_TEST_SPLIT_RATIO = 0.2
-ML_RANDOM_STATE = 42
-ML_MIN_TRAINING_SAMPLES = 10
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.preprocessing import StandardScaler
+
+# ZORUNLU Hiperparametreler
+model = RandomForestRegressor(
+    n_estimators=100,      # 100 ağaç
+    max_depth=10,          # Overfitting önleme
+    random_state=42,       # Tekrarlanabilirlik
+    n_jobs=-1              # Tüm CPU core'ları kullan
+)
+
+# Feature scaling (ZORUNLU)
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(X)
 
 # Train/test split
 X_train, X_test, y_train, y_test = train_test_split(
-    X, y,
+    X_scaled, y,
     test_size=0.2,  # %20 test
     random_state=42  # Reproducibility
 )
+```
+
+### 7 Feature (Değiştirme - Model bu feature'larla eğitildi!)
+```python
+features = [
+    'year',              # Yıl (2020-2025)
+    'month',             # Ay (1-12)
+    'months_from_start', # Time series feature
+    'season',            # Mevsim (1-4)
+    'quarter',           # Çeyrek (1-4)
+    'is_summer',         # Binary (0/1)
+    'is_winter'          # Binary (0/1)
+]
 ```
 
 ### Feature Engineering
@@ -340,15 +419,13 @@ pd.merge(..., how='inner')
 df['amount'] = df['amount'].clip(lower=0)
 ```
 
-### 6. Config Kullanımı
+### 6. Pandas sort_values() Kullanımı
 ```python
-# Hard-coded değer YASAK
-# ❌ YANLIŞ
-vat = amount * 0.20
+# ❌ YANLIŞ - Tip hatası verebilir
+df = df.sort_values('Yıl', ascending=False)
 
-# ✅ DOĞRU
-from config import Config
-vat = amount * Config.VAT_RATE
+# ✅ DOĞRU - 'by' parametresini açıkça belirt
+df = df.sort_values(by='Yıl', ascending=False)
 ```
 
 ### 7. Türkçe Arayüz
@@ -406,29 +483,31 @@ if len(data) == 0:
 
 ## YASAKLAR
 
-1. ❌ `plotly.express` kullanmak (sadece `graph_objects`)
-2. ❌ Hard-coded sabitler (config.py kullan)
-3. ❌ İngilizce UI metinleri (Türkçe zorunlu)
-4. ❌ Sıfıra bölme kontrolsüz bölme işlemi
-5. ❌ `errors='coerce'` olmadan tarih parse
-6. ❌ Duplicate kontrolü olmadan gruplama
-7. ❌ Left join (sadece inner join)
-8. ❌ Modül sorumlulukları karıştırmak
-9. ❌ Cache olmadan ağır işlemler
-10. ❌ Kullanıcıya İngilizce hata mesajı
+1. ❌ İngilizce UI metinleri (Türkçe zorunlu)
+2. ❌ Sıfıra bölme kontrolsüz bölme işlemi
+3. ❌ `errors='coerce'` olmadan tarih parse
+4. ❌ Duplicate kontrolü olmadan gruplama
+5. ❌ `sort_values()` kullanırken 'by' parametresi belirtmemek
+6. ❌ Kullanılmayan import'lar (kod temizliği)
+7. ❌ Modül sorumlulukları karıştırmak
+8. ❌ Cache olmadan ağır işlemler (veri yükleme, ML)
+9. ❌ Veritabanı şifrelerini kodda yazmak (.env kullan)
+10. ❌ Random Forest hiperparametrelerini değiştirmek (n_estimators=100, max_depth=10)
 
-## YENİ KOD YAZARKEN
+## YENİ KOD YAZARKEN - CHECKLIST
 
 1. **Hangi dosyada?** Separation of concerns kontrolü yap
 2. **Docstring var mı?** Türkçe docstring ekle
 3. **Type hints var mı?** Tip belirtme ekle
-4. **Config kullanıyor mu?** Hard-coded sabitleri config'e taşı
-5. **Duplicate kontrol var mı?** `drop_duplicates` ekle
-6. **Sıfıra bölme var mı?** Kontrol ekle
-7. **Tarih parse var mı?** `errors='coerce'` ekle
-8. **Grafik mi?** `graph_objects` kullan, `hovertemplate` ekle
+4. **Duplicate kontrol var mı?** `drop_duplicates(subset=['accrual_term_id'])` ekle
+5. **Sıfıra bölme var mı?** Kontrol ekle (`if denominator > 0`)
+6. **Tarih parse var mı?** `errors='coerce'` ekle
+7. **sort_values() kullanıyor mu?** `by` parametresi belirt
+8. **Grafik mi?** Plotly `graph_objects` kullan, `hovertemplate` ekle (Türkçe)
 9. **Türkçe mi?** Tüm UI metinleri Türkçe yap
-10. **Cache gerekli mi?** `@st.cache_data` veya `@st.cache_resource` ekle
+10. **Cache gerekli mi?** `@st.cache_data` (veri) veya `@st.cache_resource` (model) ekle
+11. **Veritabanı kullanıyor mu?** `.env` dosyasından bilgileri oku
+12. **Import temizliği?** Kullanılmayan import'ları kaldır
 
 ## HIZLI REFERANS
 
@@ -464,4 +543,34 @@ def load_data():
 
 ---
 
-**SONUÇ:** Bu proje veri analizi ve görselleştirme odaklı. Temel prensipler: temiz veri, doğru hesaplama, anlaşılır Türkçe arayüz, hızlı performans. Her değişiklikte bu prensipleri koru!
+## SON DÜZELTMELER (2025-11-25)
+
+### app.py Güncellemeleri
+
+**1. sort_values() Tip Hataları Düzeltildi**
+```python
+# ÖNCESİ (Hatalı)
+yearly_cost = yearly_cost.sort_values('Yıl', ascending=False)
+
+# SONRASI (Doğru)
+yearly_cost = yearly_cost.sort_values(by='Yıl', ascending=False)
+```
+
+**Düzeltilen satırlar:**
+- Satır 261: `yearly_cost.sort_values(by='Yıl', ascending=False)`
+- Satır 478: `monthly_detail.sort_values(by='Tarih', ascending=True)`
+- Satır 595: `yearly_summary.sort_values(by='Yıl', ascending=False)`
+
+**2. Kullanılmayan Import'lar Kaldırıldı**
+```python
+# ÖNCESİ
+import plotly.graph_objects as go  # ❌ Kullanılmıyor
+from config import Config           # ❌ Kullanılmıyor
+
+# SONRASI
+# Import'lar temizlendi - sadece kullanılanlar kaldı
+```
+
+---
+
+**SONUÇ:** Bu proje PostgreSQL entegreli, Random Forest ML destekli bir enerji analiz platformu. Temel prensipler: temiz veri, doğru hesaplama, anlaşılır Türkçe arayüz, hızlı performans, güvenli veritabanı yönetimi. Her değişiklikte bu prensipleri koru!

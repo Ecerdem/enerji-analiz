@@ -4,7 +4,8 @@
       "Bash(dir:*)",
       "Bash(tree:*)",
       "Bash(pip install:*)",
-      "Bash(python diagnose_root_problem.py:*)"
+      "Bash(python diagnose_root_problem.py:*)",
+      "mcp__ide__getDiagnostics"
     ],
     "deny": [],
     "ask": []
